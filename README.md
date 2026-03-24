@@ -94,7 +94,9 @@ You do **not** commit or upload `.venv`. Railway builds a fresh environment from
 
 ## Deploying on Vercel
 
-Use the included **`api/index.py`** + **`vercel.json`**. Set the Vercel project **Root Directory** to this folder (`flight_api`).
+Use **`api/serve.py`** (ASGI `app`) + **`vercel.json`**. Set the Vercel project **Root Directory** to the folder that **contains** `api/`, `app/`, and `requirements.txt` (this `flight_api` directory). If the Root Directory is the parent repo (e.g. `LLM_OCR_API`) and there is no `api/` there, deploy will fail or `functions` patterns will not match.
+
+`vercel.json` only rewrites traffic to `/api/serve`. Configure **Function max duration / memory** in the Vercel project settings if needed (a `functions` block with `api/index.py` often errors when that path is not part of the deployed tree).
 
 1. **Environment variables** — Add `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL` in Vercel → Settings → Environment Variables (Production). Redeploy after saving.
 2. **Smoke test** — Open `https://<your-deployment>.vercel.app/` — expect `{"status":"ok",...}`. Then try `POST /extract`.
