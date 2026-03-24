@@ -38,3 +38,9 @@ app = FastAPI(
 )
 
 app.include_router(router)
+
+
+@app.get("/")
+def root() -> dict[str, str]:
+    """Lightweight check that the deployment and routing are alive."""
+    return {"status": "ok", "service": "flight-ticket-extract"}

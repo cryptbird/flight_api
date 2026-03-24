@@ -92,6 +92,16 @@ You do **not** commit or upload `.venv`. Railway builds a fresh environment from
 
 `runtime.txt` pins the Python line Nixpacks should use (adjust the patch version if needed).
 
+## Deploying on Vercel
+
+Use the included **`api/index.py`** + **`vercel.json`**. Set the Vercel project **Root Directory** to this folder (`flight_api`).
+
+1. **Environment variables** — Add `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL` in Vercel → Settings → Environment Variables (Production). Redeploy after saving.
+2. **Smoke test** — Open `https://<your-deployment>.vercel.app/` — expect `{"status":"ok",...}`. Then try `POST /extract`.
+3. **Logs** — Vercel → your deployment → **Logs** (or Runtime Logs for the function) to see the real Python traceback for `FUNCTION_INVOCATION_FAILED`.
+4. **Limits** — Serverless **timeouts** and **memory** are tight on the free tier; PDF + remote LLM may exceed them → upgrade plan or use Railway. **Poppler** and **Tesseract** are usually **not** preinstalled on Vercel; tickets that need **OCR** may fail until you add a custom layer or switch hosts (e.g. Docker on Fly/Railway with `apt` packages).
+5. **`maxDuration` / `memory`** — Adjust in `vercel.json` within your team’s plan limits.
+
 ## Example `curl`
 
 ```bash

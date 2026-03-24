@@ -4,26 +4,28 @@ from __future__ import annotations
 
 from typing import List
 
-import cv2
-import numpy as np
-import pytesseract
 from pdf2image import convert_from_bytes
 from PIL import Image
 
 
-def _pil_to_preprocessed_bgr(image: Image.Image) -> np.ndarray:
+def _pil_to_preprocessed_bgr(image: Image.Image):
     """Convert PIL image to OpenCV BGR after grayscale Otsu threshold."""
+    import cv2
+    import numpy as np
+
     rgb = np.array(image.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     blur = cv2.GaussianBlur(gray, (3, 3), 0)
     _, th = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    # Tesseract often works well on single channel passed as RGB triple
     return cv2.cvtColor(th, cv2.COLOR_GRAY2BGR)
 
 
 def ocr_pdf_bytes(pdf_bytes: bytes, dpi: int = 200) -> str:
     """
     Rasterize PDF pages and OCR each page with Tesseract after preprocessing.
+
+    Heavy imports (cv2, pytesseract) are lazy so cold starts fail less often on
+    serverless when OCR is not needed.
 
     Args:
         pdf_bytes: Raw PDF bytes.
@@ -35,6 +37,9 @@ def ocr_pdf_bytes(pdf_bytes: bytes, dpi: int = 200) -> str:
     Raises:
         RuntimeError: If conversion or OCR fails.
     """
+    import cv2
+    import pytesseract
+
     if not pdf_bytes:
         raise RuntimeError("Empty PDF bytes for OCR")
 

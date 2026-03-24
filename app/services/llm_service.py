@@ -62,10 +62,17 @@ def _chat_completions_url() -> str:
     return f"{_API_BASE}/chat/completions"
 
 
+def _ensure_llm_config() -> None:
+    """Load config on demand (Vercel ASGI often does not run FastAPI lifespan)."""
+    if not is_model_loaded():
+        load_model()
+
+
 def _call_chat_api(user_prompt: str) -> str:
     """POST /chat/completions and return assistant message content."""
+    _ensure_llm_config()
     if _API_KEY is None or _MODEL is None:
-        raise RuntimeError("LLM not configured; load_model() must run at startup")
+        raise RuntimeError("LLM not configured; set LLM_API_BASE, LLM_API_KEY, LLM_MODEL")
 
     max_tokens = int(_env("LLM_MAX_TOKENS", "500"))
     temperature = float(_env("LLM_TEMPERATURE", "0.1"))
