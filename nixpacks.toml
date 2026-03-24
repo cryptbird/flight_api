@@ -1,0 +1,3 @@
+# Railway uses Nixpacks by default. OCR deps are not shipped with pip wheels.
+[phases.setup]
+aptPkgs = ["tesseract-ocr", "poppler-utils"]

@@ -79,6 +79,19 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open **http://localhost:8000/docs** to try `POST /extract`.
 
+## Deploying on Railway
+
+You do **not** commit or upload `.venv`. Railway builds a fresh environment from `requirements.txt`.
+
+1. **Root directory** — If the Git repo root is above this app folder, set Railway **Root Directory** to `flight_api` (the directory that contains `requirements.txt`, `app/`, and `Procfile`).
+2. **Build** — Leave the build command **empty** unless you have a custom need; Nixpacks will run `pip install -r requirements.txt` automatically. `nixpacks.toml` installs **Tesseract** and **Poppler** (`aptPkgs`) so OCR works on Linux.
+3. **Start** — Use the included `Procfile` (`web:`), or set **Custom Start Command** to:  
+   `uvicorn app.main:app --host 0.0.0.0 --port $PORT`  
+   Railway sets `$PORT`; binding to `0.0.0.0` is required.
+4. **Variables** — In the Railway service, add `LLM_API_BASE`, `LLM_API_KEY`, and `LLM_MODEL` (and optional `LLM_*` tunables). Without them the app will fail at startup.
+
+`runtime.txt` pins the Python line Nixpacks should use (adjust the patch version if needed).
+
 ## Example `curl`
 
 ```bash
