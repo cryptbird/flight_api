@@ -132,8 +132,8 @@ def build_extraction_prompt(clean_text: str, hints: RegexHints) -> str:
         )
 
     example_in = (
-        "PASSENGER 1: Sagar Ghuge (ADT)  TICKET:  /  SEAT: 19F\n"
-        "PASSENGER 2: Snehal Ghuge (ADT) TICKET:  /  SEAT: 19E\n"
+        "PASSENGER 1: Khushvardhan Bhardwaj (ADT)  TICKET:  /  SEAT: 19F\n"
+        "PASSENGER 2: Khush Bhardwaj (ADT) TICKET:  /  SEAT: 19E\n"
         "PNR: V9HQ4V\n"
         "FLIGHT: SG651 JAI (Terminal 2) 11JAN2026 18:15 -> BOM (Terminal 1) 11JAN2026 20:10\n"
         "AIRLINE: SpiceJet  CLASS: Economy"
@@ -143,8 +143,8 @@ def build_extraction_prompt(clean_text: str, hints: RegexHints) -> str:
         '"pnr":"V9HQ4V",'
         '"bookingDate":"2026-11-12T00:00:00",'
         '"passengers":['
-        '{"passengerId":1,"firstName":"Sagar","lastName":"Ghuge","type":"ADT","ticketNumber":"","seatNumber":"19F"},'
-        '{"passengerId":2,"firstName":"Snehal","lastName":"Ghuge","type":"ADT","ticketNumber":"","seatNumber":"19E"}'
+        '{"passengerId":1,"firstName":"Khushvardhan","lastName":"Bhardwaj","type":"ADT","ticketNumber":"","seatNumber":"19F"},'
+        '{"passengerId":2,"firstName":"Khush","lastName":"Bhardwaj","type":"ADT","ticketNumber":"","seatNumber":"19E"}'
         '],'
         '"flightDetails":['
         '{'
@@ -203,8 +203,8 @@ departure/arrival object schema:
 Important:
 - If the ticket has multiple passengers, return all of them in passengers[] (do not collapse into one).
 - For each passenger, pick the seat number associated with that passenger if available.
-- Create one passenger entry per distinct passenger record shown on the ticket (e.g., separate PAX rows / separate names), even if only one field differs (like seat).
-- If seat-to-passenger mapping is unclear, still create multiple passenger objects based on the distinct passenger names that appear.
+- Output one passenger object per person in the ticket. Do not create extra passengers just because seat number differs across flight segments (it is segment-specific).
+- If the ticket shows a single passenger, parse the full name (including formats like `SURNAME/GIVENNAME+TITLE`) into first/last, and still return exactly one passenger.
 - If you cannot confidently determine first vs last name, keep the best split; never omit fields.
 
 Example ticket text:

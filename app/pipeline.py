@@ -39,6 +39,163 @@ def _merge_regex_hints(ticket: FlightTicketData, hints: RegexHints) -> FlightTic
     return FlightTicketData.model_validate(data)
 
 
+def _merge_passengers_fragments(ticket: FlightTicketData) -> FlightTicketData:
+    """
+    Heuristic: some tickets show a single passenger name split across lines
+    (e.g. SURNAME/GIVENNAME+TITLE) and LLM may output multiple passenger objects.
+
+    If multiple passengers share the same non-empty ticketNumber, we merge them
+    back into one passenger (seatNumber keeps the first non-empty value).
+    """
+
+    passengers = ticket.passengers or []
+    if len(passengers) <= 1:
+        return ticket
+
+    # If ticketNumber is present, it's the best stable grouping key.
+    with_ticket = [p for p in passengers if (p.ticketNumber or "").strip()]
+    if not with_ticket:
+        # No reliable grouping key; don't guess.
+        return ticket
+
+    junk_tokens = {
+        "AGT",
+        "MR",
+        "MRS",
+        "MS",
+        "MASTER",
+        "DR",
+    }
+
+    def _strip_title_suffix(s: str) -> str:
+        s = (s or "").strip()
+        if not s:
+            return ""
+        up = s.upper()
+        for t in ["MR", "MRS", "MS", "MASTER", "DR"]:
+            if up.endswith(t):
+                s = s[: -len(t)].strip()
+                break
+        return s
+
+    def _clean_name_part(s: str) -> str:
+        s = _strip_title_suffix(s)
+        up = (s or "").strip().upper()
+        if up in junk_tokens:
+            return ""
+        return (s or "").strip()
+
+    def _merge_group(group: list) -> dict:
+        # Choose base fields from first passenger with ticketNumber.
+        base = group[0]
+        merged: dict = {
+            "passengerId": 0,
+            "firstName": "",
+            "lastName": "",
+            "type": base.type or "",
+            "ticketNumber": base.ticketNumber or "",
+            "seatNumber": "",
+        }
+
+        # Seat: keep the first non-empty seatNumber.
+        for p in group:
+            if (p.seatNumber or "").strip():
+                merged["seatNumber"] = p.seatNumber.strip()
+                break
+
+        # Merge name fragments:
+        cleaned = []
+        for p in group:
+            fn = _clean_name_part(p.firstName)
+            ln = _clean_name_part(p.lastName)
+            cleaned.append((fn, ln))
+
+        # Heuristic:
+        # - If one fragment has an empty/junk lastName, treat its firstName as surname.
+        # - The remaining first/last parts are treated as the given name.
+        surname_candidate = ""
+        surname_idx = -1
+        for i, (fn, ln) in enumerate(cleaned):
+            if fn and not ln:
+                surname_candidate = fn
+                surname_idx = i
+                break
+
+        given_parts: list[str] = []
+        for i, (fn, ln) in enumerate(cleaned):
+            if surname_idx == i:
+                continue
+            if fn:
+                given_parts.append(fn)
+            if ln:
+                given_parts.append(ln)
+
+        if surname_candidate:
+            merged["lastName"] = surname_candidate
+            merged["firstName"] = " ".join(given_parts).strip()
+        else:
+            # Fallback: use longest combined name fragment.
+            best = ""
+            best_fn = ""
+            best_ln = ""
+            for fn, ln in cleaned:
+                combined = (fn + " " + ln).strip()
+                if len(combined) > len(best):
+                    best = combined
+                    best_fn = fn
+                    best_ln = ln
+            merged["firstName"] = best_fn
+            merged["lastName"] = best_ln
+
+        merged["type"] = base.type or merged["type"]
+        merged["ticketNumber"] = base.ticketNumber or merged["ticketNumber"]
+        return merged  # type: ignore[return-value]
+
+    # Group by ticketNumber while preserving original order.
+    by_ticket: dict[str, list] = {}
+    ordered_keys: list[str] = []
+    for p in passengers:
+        key = (p.ticketNumber or "").strip()
+        if not key:
+            continue
+        if key not in by_ticket:
+            by_ticket[key] = []
+            ordered_keys.append(key)
+        by_ticket[key].append(p)
+
+    merged_passengers = []
+    passenger_id = 1
+    for key in ordered_keys:
+        group = by_ticket.get(key) or []
+        if len(group) == 1:
+            merged_passengers.append(group[0])
+        else:
+            # Only merge when the fragments look like they come from a single name
+            # (common artifacts like `AGT`/titles leaking into the lastName field).
+            fragmentation_evidence = any(
+                (p.lastName or "").strip() and not _clean_name_part(p.lastName)
+                for p in group
+            )
+            if fragmentation_evidence:
+                merged_payload = _merge_group(group)
+                merged_passengers.append(merged_payload)
+            else:
+                merged_passengers.extend(group)
+        passenger_id += 1
+
+    # Renumber passengerId sequentially after merging.
+    renumbered = []
+    for i, p in enumerate(merged_passengers, start=1):
+        if isinstance(p, dict):
+            p["passengerId"] = i
+            renumbered.append(p)
+        else:
+            p.passengerId = i  # type: ignore[misc]
+            renumbered.append(p)
+
+    return FlightTicketData.model_validate({**ticket.model_dump(), "passengers": renumbered})
+
+
 def _validate_pdf_magic(file_bytes: bytes) -> None:
     if not file_bytes:
         raise ValueError("Empty file upload")
@@ -115,7 +272,9 @@ def extract_ticket_from_pdf(file_bytes: bytes) -> FlightTicketData:
 
         try:
             ticket = parse_flight_ticket_json(json_str)
-            return _merge_regex_hints(ticket, hints)
+            ticket = _merge_regex_hints(ticket, hints)
+            ticket = _merge_passengers_fragments(ticket)
+            return ticket
         except ValueError as exc:
             last_error = str(exc)
             logger.warning("Attempt %s: validation failed: %s", attempt + 1, last_error)
