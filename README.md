@@ -114,20 +114,44 @@ curl -X POST "http://localhost:8000/extract" -F "file=@ticket.pdf"
 
 ```json
 {
-  "status": "success",
+  "success": true,
+  "message": "Ticket parsed successfully",
   "data": {
-    "passenger_name": "",
     "pnr": "",
-    "airline": "",
-    "flight_number": "",
-    "departure_airport": "",
-    "arrival_airport": "",
-    "departure_time": "",
-    "arrival_time": "",
-    "date": "",
-    "seat": "",
-    "gate": "",
-    "price": ""
+    "bookingDate": "",
+    "passengers": [
+      {
+        "passengerId": 1,
+        "firstName": "",
+        "lastName": "",
+        "type": "",
+        "ticketNumber": "",
+        "seatNumber": ""
+      }
+    ],
+    "flightDetails": [
+      {
+        "segmentId": 1,
+        "airlineName": "",
+        "airlineCode": "",
+        "flightNumber": "",
+        "departure": {
+          "airportCode": "",
+          "city": "",
+          "terminal": "",
+          "dateTime": ""
+        },
+        "arrival": {
+          "airportCode": "",
+          "city": "",
+          "terminal": "",
+          "dateTime": ""
+        },
+        "travelClass": "",
+        "bookingClass": "",
+        "status": ""
+      }
+    ]
   }
 }
 ```
@@ -156,6 +180,6 @@ flight_api/
 
 ## Notes
 
-- Startup **fails fast** if `LLM_API_BASE`, `LLM_API_KEY`, or `LLM_MODEL` is missing.
+- Startup only logs a warning at cold start; `/extract` still requires LLM env vars.
 - If PDF text is short or empty, the service uses OCR automatically.
-- All extracted fields are **strings**; unknown values should be `""` when the model follows instructions.
+- Most extracted fields are **strings**; unknown values should be `""` when the model follows instructions (except numeric IDs like `passengerId`/`segmentId`).

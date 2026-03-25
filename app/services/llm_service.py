@@ -127,32 +127,85 @@ def build_extraction_prompt(clean_text: str, hints: RegexHints) -> str:
     hint_line = ""
     if hints.pnr or hints.flight_number:
         hint_line = (
-            f"Regex hints (use if they clearly match the ticket, else infer from text): "
+            "Regex hints (use if they clearly match the ticket, else infer from text): "
             f"pnr={hints.pnr or 'unknown'}, flight_number={hints.flight_number or 'unknown'}.\n"
         )
 
     example_in = (
-        "PASSENGER: DOE/JANE MRS\n"
-        "PNR: X1Y2Z3  FLT AI101 DEL-BOM  12FEB2025 0915-1135\n"
-        "AIR INDIA  GATE 12A  SEAT 14C  FARE INR 8450"
+        "PASSENGER 1: Sagar Ghuge (ADT)  TICKET:  /  SEAT: 19F\n"
+        "PASSENGER 2: Snehal Ghuge (ADT) TICKET:  /  SEAT: 19E\n"
+        "PNR: V9HQ4V\n"
+        "FLIGHT: SG651 JAI (Terminal 2) 11JAN2026 18:15 -> BOM (Terminal 1) 11JAN2026 20:10\n"
+        "AIRLINE: SpiceJet  CLASS: Economy"
     )
     example_out = (
-        '{"passenger_name":"Jane Doe","pnr":"X1Y2Z3","airline":"Air India",'
-        '"flight_number":"AI101","departure_airport":"DEL","arrival_airport":"BOM",'
-        '"departure_time":"0915","arrival_time":"1135","date":"2025-02-12",'
-        '"seat":"14C","gate":"12A","price":"INR 8450"}'
+        '{'
+        '"pnr":"V9HQ4V",'
+        '"bookingDate":"2026-11-12T00:00:00",'
+        '"passengers":['
+        '{"passengerId":1,"firstName":"Sagar","lastName":"Ghuge","type":"ADT","ticketNumber":"","seatNumber":"19F"},'
+        '{"passengerId":2,"firstName":"Snehal","lastName":"Ghuge","type":"ADT","ticketNumber":"","seatNumber":"19E"}'
+        '],'
+        '"flightDetails":['
+        '{'
+        '"segmentId":1,'
+        '"airlineName":"SpiceJet",'
+        '"airlineCode":"SG",'
+        '"flightNumber":"SG651",'
+        '"departure":{"airportCode":"JAI","city":"Jaipur","terminal":"2","dateTime":"2026-01-11T18:15:00"},'
+        '"arrival":{"airportCode":"BOM","city":"Mumbai","terminal":"1","dateTime":"2026-01-11T20:10:00"},'
+        '"travelClass":"Economy",'
+        '"bookingClass":"",'
+        '"status":""'
+        '}'
+        ']'
+        '}'
     )
 
     return f"""You extract structured flight ticket data for downstream APIs.
 
-Task: read the ticket text and return ONLY a single valid JSON object. No markdown, no code fences, no commentary.
+Task: read the ticket text and return ONLY a single valid JSON object (no markdown, no code fences, no commentary).
 
-JSON rules:
-- Return ONLY raw JSON beginning with {{ and ending with }}.
-- Every value must be a string (use "" when unknown).
-- Required keys exactly (all strings):
-  passenger_name, pnr, airline, flight_number, departure_airport, arrival_airport,
-  departure_time, arrival_time, date, seat, gate, price
+JSON rules (schema is strict):
+Return ONLY raw JSON beginning with {{ and ending with }}.
+
+Top-level keys (exactly these):
+- pnr (string)
+- bookingDate (string ISO-8601 like 2026-11-12T00:00:00; use "" if unknown)
+- passengers (array)
+- flightDetails (array)
+
+Passenger item schema (exact keys, no extras):
+- passengerId (integer, 1-based; must be unique within passengers[])
+- firstName (string; use "" if unknown)
+- lastName (string; use "" if unknown)
+- type (string like "ADT"/"CHD"/"INF" if present, else "")
+- ticketNumber (string; use "" if unknown)
+- seatNumber (string; use "" if unknown)
+
+Flight segment schema (exact keys, no extras):
+- segmentId (integer, 1-based within flightDetails[])
+- airlineName (string; use "" if unknown)
+- airlineCode (string; use "" if unknown)
+- flightNumber (string; use "" if unknown)
+- departure (object with exact keys airportCode, city, terminal, dateTime)
+- arrival (object with exact keys airportCode, city, terminal, dateTime)
+- travelClass (string; use "" if unknown)
+- bookingClass (string; use "" if unknown)
+- status (string; use "" if unknown)
+
+departure/arrival object schema:
+- airportCode (string; use "" if unknown)
+- city (string; use "" if unknown)
+- terminal (string; use "" if unknown)
+- dateTime (string ISO-8601 like 2026-01-11T18:15:00; use "" if unknown)
+
+Important:
+- If the ticket has multiple passengers, return all of them in passengers[] (do not collapse into one).
+- For each passenger, pick the seat number associated with that passenger if available.
+- Create one passenger entry per distinct passenger record shown on the ticket (e.g., separate PAX rows / separate names), even if only one field differs (like seat).
+- If seat-to-passenger mapping is unclear, still create multiple passenger objects based on the distinct passenger names that appear.
+- If you cannot confidently determine first vs last name, keep the best split; never omit fields.
 
 Example ticket text:
 {example_in}
@@ -176,14 +229,28 @@ def build_correction_prompt(previous_output: str, validation_error: str) -> str:
     """
     return f"""Fix this JSON to match the schema exactly.
 
-Schema: an object with ONLY these string keys (all values strings, use "" if missing):
-passenger_name, pnr, airline, flight_number, departure_airport, arrival_airport,
-departure_time, arrival_time, date, seat, gate, price
+Schema (strict):
+Top-level JSON object with ONLY these keys:
+pnr, bookingDate, passengers, flightDetails
+
+passengers: array of objects with ONLY these keys:
+passengerId, firstName, lastName, type, ticketNumber, seatNumber
+
+flightDetails: array of objects with ONLY these keys:
+segmentId, airlineName, airlineCode, flightNumber, departure, arrival, travelClass, bookingClass, status
+
+departure/arrival objects with ONLY these keys:
+airportCode, city, terminal, dateTime
+
+Rules:
+- Use "" for unknown string fields.
+- passengerId and segmentId must be integers.
+- Do not wrap in markdown or add commentary.
 
 Validation error:
 {validation_error}
 
-Broken model output (extract and repair into one valid JSON object):
+Broken model output:
 {previous_output}
 
 Return ONLY valid JSON. No explanations."""
