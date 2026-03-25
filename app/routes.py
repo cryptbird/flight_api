@@ -16,7 +16,7 @@ router = APIRouter(tags=["extraction"])
 
 
 def _error_body(message: str) -> Dict[str, str]:
-    return {"status": "error", "message": message}
+    return {"success": False, "message": message}
 
 
 @router.post("/extract", response_model=None)
@@ -64,6 +64,7 @@ async def extract_flight_data(file: UploadFile = File(...)) -> JSONResponse | Di
         )
 
     return {
-        "status": "success",
+        "success": True,
+        "message": "Ticket parsed successfully",
         "data": ticket.model_dump(),
     }

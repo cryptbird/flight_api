@@ -5,22 +5,56 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 
+class Passenger(BaseModel):
+    passengerId: int = Field(..., description="1-based passenger index")
+    firstName: str = Field(..., description="Passenger first name")
+    lastName: str = Field(..., description="Passenger last name")
+    type: str = Field(..., description="Passenger type like ADT/CHD/INF if present, else empty string")
+    ticketNumber: str = Field(..., description="Ticket / e-ticket number if present, else empty string")
+    seatNumber: str = Field(..., description="Seat number if present, else empty string")
+
+    model_config = {"extra": "forbid"}
+
+
+class AirportStop(BaseModel):
+    airportCode: str = Field(..., description="IATA airport code (or empty string)")
+    city: str = Field(..., description="City name if present, else empty string")
+    terminal: str = Field(..., description="Terminal if present, else empty string")
+    dateTime: str = Field(
+        ...,
+        description="ISO-8601 local date-time like 2026-01-11T18:15:00; empty string if unknown",
+    )
+
+    model_config = {"extra": "forbid"}
+
+
+class FlightSegment(BaseModel):
+    segmentId: int = Field(..., description="1-based segment index")
+    airlineName: str = Field(..., description="Airline name if present, else empty string")
+    airlineCode: str = Field(..., description="Airline code like SG if present, else empty string")
+    flightNumber: str = Field(..., description="Flight number like SG651 if present, else empty string")
+    departure: AirportStop
+    arrival: AirportStop
+    travelClass: str = Field(..., description="Travel cabin/class like Economy if present, else empty string")
+    bookingClass: str = Field(..., description="Booking class if present, else empty string")
+    status: str = Field(..., description="Status like Confirmed if present, else empty string")
+
+    model_config = {"extra": "forbid"}
+
+
 class FlightTicketData(BaseModel):
-    """Structured flight ticket fields; all keys are required strings (may be empty)."""
+    """
+    Extracted ticket data in the format expected by the client.
 
-    passenger_name: str = Field(..., description="Passenger full name as on ticket")
+    All string fields must be present in the JSON (use "" when unknown).
+    """
+
     pnr: str = Field(..., description="Booking reference / PNR")
-    airline: str = Field(..., description="Airline name or code")
-    flight_number: str = Field(..., description="Flight number, e.g. AI101")
-    departure_airport: str = Field(..., description="Departure airport code or name")
-    arrival_airport: str = Field(..., description="Arrival airport code or name")
-    departure_time: str = Field(..., description="Scheduled departure time")
-    arrival_time: str = Field(..., description="Scheduled arrival time")
-    date: str = Field(..., description="Flight date")
-    seat: str = Field(..., description="Seat assignment if present")
-    gate: str = Field(..., description="Departure gate if present")
-    price: str = Field(..., description="Fare or total price if present")
+    bookingDate: str = Field(
+        ...,
+        description="ISO-8601 date like 2026-11-12T00:00:00; empty string if unknown",
+    )
+    passengers: list[Passenger] = Field(..., description="All passengers listed on the ticket")
+    flightDetails: list[FlightSegment] = Field(..., description="One entry per flight segment")
 
-    model_config = {
-        "extra": "forbid",
-    }
+    model_config = {"extra": "forbid"}

@@ -27,8 +27,15 @@ def _merge_regex_hints(ticket: FlightTicketData, hints: RegexHints) -> FlightTic
     data = ticket.model_dump()
     if not data.get("pnr", "").strip() and hints.pnr:
         data["pnr"] = hints.pnr
-    if not data.get("flight_number", "").strip() and hints.flight_number:
-        data["flight_number"] = hints.flight_number
+
+    # Fill flight number into the first segment that doesn't have it yet.
+    if hints.flight_number:
+        segments = data.get("flightDetails") or []
+        for seg in segments:
+            if not (seg.get("flightNumber") or "").strip():
+                seg["flightNumber"] = hints.flight_number
+                break
+
     return FlightTicketData.model_validate(data)
 
 
