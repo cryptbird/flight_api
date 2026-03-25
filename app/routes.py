@@ -22,18 +22,11 @@ def _error_body(message: str) -> Dict[str, str]:
 @router.post("/extract", response_model=None)
 async def extract_flight_data(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
     """
-    Accept a PDF flight ticket and return structured JSON via the extraction pipeline.
+    Accept a PDF or an image (boarding pass scan) and return structured JSON via the extraction pipeline.
 
     Returns:
         Success envelope with ``data`` or error envelope with ``message``.
     """
-    filename = (file.filename or "").lower()
-    if not filename.endswith(".pdf"):
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content=_error_body("Invalid file type; PDF required"),
-        )
-
     try:
         payload = await file.read()
     except Exception as exc:  # pragma: no cover - defensive

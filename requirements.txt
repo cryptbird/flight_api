@@ -7,6 +7,7 @@ httpx>=0.27.0
 pdfplumber>=0.10.0
 pytesseract>=0.3.10
 pdf2image>=1.16.0
+pymupdf
 Pillow>=10.0.0
 opencv-python-headless>=4.8.0
 

@@ -7,7 +7,7 @@ from typing import Final
 
 from app.models.schema import FlightTicketData
 from app.services import llm_service
-from app.services.ocr_service import ocr_pdf_bytes
+from app.services.ocr_service import ocr_image_bytes, ocr_pdf_bytes
 from app.services.parser_service import extract_json_object, parse_flight_ticket_json
 from app.services.pdf_service import extract_text_pdfplumber, is_text_layer_too_weak
 from app.services.regex_service import RegexHints, extract_regex_hints
@@ -196,11 +196,9 @@ def _merge_passengers_fragments(ticket: FlightTicketData) -> FlightTicketData:
     return FlightTicketData.model_validate({**ticket.model_dump(), "passengers": renumbered})
 
 
-def _validate_pdf_magic(file_bytes: bytes) -> None:
+def _validate_document_bytes(file_bytes: bytes) -> None:
     if not file_bytes:
         raise ValueError("Empty file upload")
-    if not file_bytes.startswith(_PDF_MAGIC_PREFIX):
-        raise ValueError("Invalid file type: not a PDF")
 
 
 def extract_ticket_from_pdf(file_bytes: bytes) -> FlightTicketData:
@@ -217,24 +215,33 @@ def extract_ticket_from_pdf(file_bytes: bytes) -> FlightTicketData:
         ValueError: For invalid PDF, empty content, or unrecoverable extraction.
         RuntimeError: If LLM repeatedly fails to produce valid structured output.
     """
-    _validate_pdf_magic(file_bytes)
+    _validate_document_bytes(file_bytes)
 
-    try:
-        raw_text = extract_text_pdfplumber(file_bytes)
-    except ValueError:
-        raise
-    except Exception as exc:
-        raise ValueError(f"PDF text extraction failed: {exc}") from exc
-
-    used_ocr = False
-    if is_text_layer_too_weak(raw_text, min_chars=_MIN_TEXT_CHARS):
-        logger.info("Text layer weak or empty; running OCR fallback.")
+    is_pdf = file_bytes.startswith(_PDF_MAGIC_PREFIX)
+    if is_pdf:
         try:
-            raw_text = ocr_pdf_bytes(file_bytes)
-        except RuntimeError:
+            raw_text = extract_text_pdfplumber(file_bytes)
+        except ValueError:
             raise
         except Exception as exc:
-            raise RuntimeError(f"OCR failure: {exc}") from exc
+            raise ValueError(f"PDF text extraction failed: {exc}") from exc
+
+        used_ocr = False
+        if is_text_layer_too_weak(raw_text, min_chars=_MIN_TEXT_CHARS):
+            logger.info("Text layer weak or empty; running OCR fallback.")
+            try:
+                raw_text = ocr_pdf_bytes(file_bytes)
+            except RuntimeError:
+                raise
+            except Exception as exc:
+                raise RuntimeError(f"OCR failure: {exc}") from exc
+            used_ocr = True
+    else:
+        # Treat everything else as an image; OCR will validate/parse it.
+        try:
+            raw_text = ocr_image_bytes(file_bytes)
+        except Exception as exc:
+            raise ValueError(f"OCR on image failed (unsupported image?): {exc}") from exc
         used_ocr = True
 
     if not raw_text.strip():
@@ -244,7 +251,7 @@ def extract_ticket_from_pdf(file_bytes: bytes) -> FlightTicketData:
     if not cleaned:
         msg = "Empty PDF after cleaning"
         if used_ocr:
-            msg += " (OCR produced no usable text — check Tesseract/Poppler or image quality)"
+            msg += " (OCR produced no usable text — check Tesseract and image/PDF quality)"
         raise ValueError(msg)
 
     hints = extract_regex_hints(cleaned)

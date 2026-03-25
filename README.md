@@ -1,18 +1,18 @@
 # Flight Ticket Extraction API
 
-FastAPI service that accepts a **flight ticket PDF** and returns **structured JSON**, using **pdfplumber** with **OCR fallback** (pytesseract, pdf2image, OpenCV) and a **remote LLM** via an **OpenAI-compatible Chat Completions API**. You choose the provider and model (many hosts expose **open-weights** models such as Llama, Mistral, Qwen, etc.).
+FastAPI service that accepts a **flight ticket PDF** or an **uploaded image** of a boarding pass/ticket and returns **structured JSON**, using **pdfplumber** with **OCR fallback** (pytesseract, pdf2image, PyMuPDF, OpenCV) and a **remote LLM** via an **OpenAI-compatible Chat Completions API**. You choose the provider and model (many hosts expose **open-weights** models such as Llama, Mistral, Qwen, etc.).
 
 ## Features
 
-- `POST /extract` — multipart upload of a `.pdf` file
-- Pipeline: PDF → text (pdfplumber) → optional OCR → text cleaning → regex hints (PNR, flight number) → LLM JSON extraction → Pydantic validation → up to **3** retries with a correction prompt
+- `POST /extract` — multipart upload of a `.pdf` or an image (`.png/.jpg/.jpeg/.webp`)
+- Pipeline: PDF/image → text (pdfplumber for PDFs, OCR fallback for scans) → text cleaning → regex hints (PNR, flight number) → LLM JSON extraction → Pydantic validation → up to **3** retries with a correction prompt
 - **No local LLM weights** — calls `POST {LLM_API_BASE}/chat/completions` with your API key
 
 ## Prerequisites
 
 1. **Python 3.10+**
 2. **Tesseract OCR** (OCR fallback) — [Windows builds](https://github.com/UB-Mannheim/tesseract/wiki); ensure `tesseract` is on `PATH`.
-3. **Poppler** (for `pdf2image`) — required to rasterize PDFs for OCR.
+3. **Poppler** (for `pdf2image`) — optional now. If Poppler is missing, the service falls back to **PyMuPDF** to rasterize PDFs for OCR.
 4. An account with a provider that offers an **OpenAI-compatible** HTTP API (examples below).
 
 ## LLM configuration (required)
@@ -101,13 +101,15 @@ Use **`api/serve.py`** (ASGI `app`) + **`vercel.json`**. Set the Vercel project 
 1. **Environment variables** — Add `LLM_API_BASE`, `LLM_API_KEY`, `LLM_MODEL` in Vercel → Settings → Environment Variables (Production). Redeploy after saving.
 2. **Smoke test** — Open `https://<your-deployment>.vercel.app/` — expect `{"status":"ok",...}`. Then try `POST /extract`.
 3. **Logs** — Vercel → your deployment → **Logs** (or Runtime Logs for the function) to see the real Python traceback for `FUNCTION_INVOCATION_FAILED`.
-4. **Limits** — Serverless **timeouts** and **memory** are tight on the free tier; PDF + remote LLM may exceed them → upgrade plan or use Railway. **Poppler** and **Tesseract** are usually **not** preinstalled on Vercel; tickets that need **OCR** may fail until you add a custom layer or switch hosts (e.g. Docker on Fly/Railway with `apt` packages).
+4. **Limits** — Serverless **timeouts** and **memory** are tight on the free tier; PDF + remote LLM may exceed them → upgrade plan or use Railway. **Tesseract** is usually **not** preinstalled on Vercel; with Poppler missing, OCR still works via **PyMuPDF** (but still needs Tesseract).
 5. **`maxDuration` / `memory`** — Adjust in `vercel.json` within your team’s plan limits.
 
 ## Example `curl`
 
 ```bash
 curl -X POST "http://localhost:8000/extract" -F "file=@ticket.pdf"
+# or
+curl -X POST "http://localhost:8000/extract" -F "file=@boarding_pass.png"
 ```
 
 ## Success response shape
