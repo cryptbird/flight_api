@@ -48,7 +48,7 @@ def _ocr_pil_images(images: Iterable[Image.Image]) -> str:
             texts.append(page_text)
         except pytesseract.TesseractNotFoundError as exc:
             raise RuntimeError(
-                "Tesseract executable not found. Install Tesseract and ensure it is on PATH."
+                "Tesseract executable not found. On Vercel, ensure the build installs a `tesseract` package via `vercel.json installCommand`, then redeploy. Also confirm `tesseract` exists in a typical path like `/usr/bin/tesseract`."
             ) from exc
         except Exception as exc:
             raise RuntimeError(f"OCR failed: {exc}") from exc

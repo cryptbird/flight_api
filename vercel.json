@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "dnf install -y tesseract-ocr",
+  "installCommand": "dnf install -y tesseract || dnf install -y tesseract-ocr",
   "rewrites": [{ "source": "/(.*)", "destination": "/api/serve" }]
 }
