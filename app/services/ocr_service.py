@@ -29,6 +29,15 @@ def _ocr_pil_images(images: Iterable[Image.Image]) -> str:
     """Run OpenCV preprocessing + pytesseract OCR over PIL images."""
     import cv2
     import pytesseract
+    import shutil
+
+    # Vercel/serverless environments may not expose system binaries on PATH.
+    # If the binary exists in a common location, point pytesseract to it.
+    if shutil.which("tesseract") is None:
+        for candidate in ("/usr/bin/tesseract", "/bin/tesseract"):
+            if shutil.which(candidate) is not None:
+                pytesseract.pytesseract.tesseract_cmd = candidate
+                break
 
     texts: list[str] = []
     for img in images:
