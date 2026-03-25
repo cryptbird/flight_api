@@ -16,13 +16,21 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Validate LLM API env at startup (no local model download)."""
+    """
+    Best-effort LLM env check at startup.
+
+    On platforms like Vercel, missing project env vars would abort the whole
+    function (including GET /) if we re-raised here. /extract validates config
+    when a request runs.
+    """
     logger.info("Starting application lifespan: validating LLM API configuration...")
     try:
         llm_service.load_model()
-    except Exception:
-        logger.exception("LLM API configuration failed at startup")
-        raise
+    except Exception as exc:
+        logger.warning(
+            "LLM API not ready at startup (health route still works): %s",
+            exc,
+        )
     yield
     logger.info("Application shutdown.")
 
